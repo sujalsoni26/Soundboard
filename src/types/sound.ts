@@ -37,6 +37,14 @@ export interface AppSettings {
   theme: "dark" | "light";
 }
 
+export interface Playlist {
+  id: string;
+  name: string;
+  emoji: string;
+  soundIds: string[];
+  createdAt: number;
+}
+
 export interface KeyboardShortcut {
   soundId: string;
   key: string;

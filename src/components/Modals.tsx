@@ -1,8 +1,9 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Keyboard, Settings, Upload, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useState } from "react";
+import { PlaylistsModal } from "@/components/SoundManageModals";
 import { useSoundboard } from "@/hooks/use-soundboard";
 import type { OverlapMode, ShareMode } from "@/types/sound";
 import { cn, isValidAudioFile } from "@/utils/cn";
@@ -24,7 +25,7 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
+    <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center">
       <button
         type="button"
         aria-label="Close modal backdrop"
@@ -34,12 +35,12 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
       <motion.div
         initial={{ opacity: 0, y: 40 }}
         animate={{ opacity: 1, y: 0 }}
-        className="relative z-10 max-h-[90vh] w-full overflow-y-auto rounded-t-3xl border border-card-border bg-modal p-6 sm:max-w-lg sm:rounded-3xl"
+        className="relative z-10 max-h-[min(90dvh,90vh)] w-full overflow-y-auto overscroll-contain rounded-t-3xl border border-card-border bg-modal p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:max-w-lg sm:rounded-3xl sm:p-6"
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
       >
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-4 flex items-center justify-between gap-3">
           <h2 id="modal-title" className="text-lg font-semibold text-foreground">
             {title}
           </h2>
@@ -47,7 +48,7 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="rounded-xl p-2 text-muted hover:bg-surface-hover hover:text-foreground"
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-muted active:bg-surface-hover active:text-foreground sm:h-9 sm:w-9 sm:hover:bg-surface-hover sm:hover:text-foreground"
           >
             <X className="h-5 w-5" />
           </button>
@@ -243,32 +244,34 @@ export function ShortcutsModal({ open, onClose }: { open: boolean; onClose: () =
   );
 }
 
-export function HeaderActions() {
+export function useAppModals() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [playlistsOpen, setPlaylistsOpen] = useState(false);
 
-  return (
+  const isModalOpen = settingsOpen || shortcutsOpen || uploadOpen || playlistsOpen;
+
+  const modalHost = (
     <>
-      <div className="flex gap-2">
-        <HeaderIconButton label="Upload sound" onClick={() => setUploadOpen(true)}>
-          <Upload className="h-5 w-5" />
-        </HeaderIconButton>
-        <HeaderIconButton label="Keyboard shortcuts" onClick={() => setShortcutsOpen(true)}>
-          <Keyboard className="h-5 w-5" />
-        </HeaderIconButton>
-        <HeaderIconButton label="Settings" onClick={() => setSettingsOpen(true)}>
-          <Settings className="h-5 w-5" />
-        </HeaderIconButton>
-      </div>
+      <PlaylistsModal open={playlistsOpen} onClose={() => setPlaylistsOpen(false)} />
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       <UploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} />
     </>
   );
+
+  return {
+    modalHost,
+    isModalOpen,
+    openPlaylists: () => setPlaylistsOpen(true),
+    openUpload: () => setUploadOpen(true),
+    openShortcuts: () => setShortcutsOpen(true),
+    openSettings: () => setSettingsOpen(true),
+  };
 }
 
-function UploadModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function UploadModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { addCustomSound } = useSoundboard();
   const [title, setTitle] = useState("");
   const [emoji, setEmoji] = useState("🎵");
@@ -418,27 +421,6 @@ function DangerButton({
       type="button"
       onClick={onClick}
       className="rounded-xl bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-300 hover:bg-red-500/20"
-    >
-      {children}
-    </button>
-  );
-}
-
-function HeaderIconButton({
-  children,
-  label,
-  onClick,
-}: {
-  children: React.ReactNode;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      onClick={onClick}
-      className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-surface text-foreground hover:bg-surface-hover"
     >
       {children}
     </button>

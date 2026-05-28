@@ -14,7 +14,15 @@ const FILTERS = [
 ];
 
 export function CategoryTabs() {
-  const { activeCategory, setActiveCategory, viewFilter, setViewFilter } = useSoundboard();
+  const {
+    activeCategory,
+    setActiveCategory,
+    viewFilter,
+    setViewFilter,
+    playlists,
+    activePlaylistId,
+    selectPlaylist,
+  } = useSoundboard();
 
   return (
     <div className="space-y-3">
@@ -36,23 +44,50 @@ export function CategoryTabs() {
         ))}
       </div>
 
-      <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <CategoryChip
-          label="All Categories"
-          emoji="🌈"
-          active={activeCategory === "All"}
-          onClick={() => setActiveCategory("All")}
-        />
-        {CATEGORIES.filter((c) => c !== "Custom").map((category) => (
+      {playlists.length > 0 && (
+        <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {playlists.map((playlist) => (
+            <motion.button
+              key={playlist.id}
+              type="button"
+              whileTap={{ scale: 0.96 }}
+              onClick={() =>
+                activePlaylistId === playlist.id && viewFilter === "playlist"
+                  ? selectPlaylist(null)
+                  : selectPlaylist(playlist.id)
+              }
+              className={cn(
+                "shrink-0 rounded-full border px-3 py-1.5 text-sm transition-colors",
+                viewFilter === "playlist" && activePlaylistId === playlist.id
+                  ? "border-[var(--accent-chip-border)] bg-[var(--accent-chip)] text-[var(--accent-chip-text)]"
+                  : "border-card-border bg-surface text-muted hover:text-foreground",
+              )}
+            >
+              {playlist.emoji} {playlist.name}
+            </motion.button>
+          ))}
+        </div>
+      )}
+
+      {viewFilter !== "playlist" && (
+        <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <CategoryChip
-            key={category}
-            label={category}
-            emoji={CATEGORY_EMOJI[category as SoundCategory]}
-            active={activeCategory === category}
-            onClick={() => setActiveCategory(category)}
+            label="All Categories"
+            emoji="🌈"
+            active={activeCategory === "All"}
+            onClick={() => setActiveCategory("All")}
           />
-        ))}
-      </div>
+          {CATEGORIES.filter((c) => c !== "Custom").map((category) => (
+            <CategoryChip
+              key={category}
+              label={category}
+              emoji={CATEGORY_EMOJI[category as SoundCategory]}
+              active={activeCategory === category}
+              onClick={() => setActiveCategory(category)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

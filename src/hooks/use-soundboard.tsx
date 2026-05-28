@@ -15,27 +15,36 @@ import { useLocalStorage, useLocalStorageSet } from "@/hooks/use-local-storage";
 import { audioManager } from "@/lib/audio-manager";
 import {
   DEFAULT_SETTINGS,
+  MAX_PLAYLISTS,
   PRELOAD_BATCH_SIZE,
   STORAGE_KEYS,
   TRENDING_LIMIT,
 } from "@/lib/constants";
-import type { AppSettings, KeyboardShortcut, Sound, SoundCategory } from "@/types/sound";
+import type { AppSettings, KeyboardShortcut, Playlist, Sound, SoundCategory } from "@/types/sound";
 import { generateId, slugify, vibrate } from "@/utils/cn";
 import { shareSound } from "@/utils/share-sound";
 
-export type ViewFilter = "all" | "favorites" | "recent" | "trending";
+export type ViewFilter = "all" | "favorites" | "recent" | "trending" | "playlist" | "hidden";
 
 interface SoundboardContextValue {
   sounds: Sound[];
   filteredSounds: Sound[];
+  playlists: Playlist[];
+  activePlaylistId: string | null;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   activeCategory: SoundCategory | "All";
   setActiveCategory: (category: SoundCategory | "All") => void;
   viewFilter: ViewFilter;
   setViewFilter: (filter: ViewFilter) => void;
+  selectPlaylist: (playlistId: string | null) => void;
   favorites: Set<string>;
+  hiddenSounds: Set<string>;
   toggleFavorite: (soundId: string) => void;
+  hideSound: (soundId: string) => void;
+  unhideSound: (soundId: string) => void;
+  isSoundHidden: (soundId: string) => boolean;
+  visibleSoundCount: number;
   recentIds: string[];
   playCounts: Record<string, number>;
   trendingSounds: Sound[];
@@ -52,6 +61,15 @@ interface SoundboardContextValue {
   playRandom: (fromCategory?: boolean) => void;
   addCustomSound: (sound: Omit<Sound, "id" | "slug" | "isCustom" | "createdAt">) => void;
   removeCustomSound: (soundId: string) => void;
+  renameSound: (soundId: string, title: string) => void;
+  resetSoundName: (soundId: string) => void;
+  getOriginalTitle: (soundId: string) => string;
+  createPlaylist: (name: string, emoji?: string) => void;
+  updatePlaylist: (playlistId: string, patch: Partial<Pick<Playlist, "name" | "emoji">>) => void;
+  deletePlaylist: (playlistId: string) => void;
+  addSoundToPlaylist: (playlistId: string, soundId: string) => void;
+  removeSoundFromPlaylist: (playlistId: string, soundId: string) => void;
+  isSoundInPlaylist: (playlistId: string, soundId: string) => boolean;
   clearFavorites: () => void;
   clearRecent: () => void;
   clearPlayCounts: () => void;
@@ -70,11 +88,24 @@ function mergeSounds(customSounds: Sound[]): Sound[] {
   return Array.from(map.values());
 }
 
+function applyCustomNames(baseSounds: Sound[], customNames: Record<string, string>): Sound[] {
+  return baseSounds.map((sound) => ({
+    ...sound,
+    title: customNames[sound.id]?.trim() || sound.title,
+  }));
+}
+
 export function SoundboardProvider({ children }: { children: ReactNode }) {
   const [customSounds, setCustomSounds] = useLocalStorage<Sound[]>(
     STORAGE_KEYS.customSounds,
     [],
   );
+  const [customNames, setCustomNames] = useLocalStorage<Record<string, string>>(
+    STORAGE_KEYS.customNames,
+    {},
+  );
+  const [playlists, setPlaylists] = useLocalStorage<Playlist[]>(STORAGE_KEYS.playlists, []);
+  const [hiddenSounds, setHiddenSounds] = useLocalStorageSet(STORAGE_KEYS.hiddenSounds);
   const [favorites, setFavorites] = useLocalStorageSet(STORAGE_KEYS.favorites);
   const [recentIds, setRecentIds] = useLocalStorage<string[]>(STORAGE_KEYS.recent, []);
   const [playCounts, setPlayCounts] = useLocalStorage<Record<string, number>>(
@@ -97,11 +128,16 @@ export function SoundboardProvider({ children }: { children: ReactNode }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<SoundCategory | "All">("All");
   const [viewFilter, setViewFilter] = useState<ViewFilter>("all");
+  const [activePlaylistId, setActivePlaylistId] = useState<string | null>(null);
   const [playingIds, setPlayingIds] = useState<Set<string>>(new Set());
   const [playbackError, setPlaybackError] = useState<string | null>(null);
   const preloadedRef = useRef(new Set<string>());
 
-  const sounds = useMemo(() => mergeSounds(customSounds), [customSounds]);
+  const baseSounds = useMemo(() => mergeSounds(customSounds), [customSounds]);
+  const sounds = useMemo(
+    () => applyCustomNames(baseSounds, customNames),
+    [baseSounds, customNames],
+  );
 
   useEffect(() => {
     audioManager.setVolume(mergedSettings.volume);
@@ -191,6 +227,36 @@ export function SoundboardProvider({ children }: { children: ReactNode }) {
     [setFavorites],
   );
 
+  const hideSound = useCallback(
+    (soundId: string) => {
+      setHiddenSounds((prev) => new Set(prev).add(soundId));
+      audioManager.stopSound(soundId);
+      setPlayingIds((prev) => {
+        if (!prev.has(soundId)) return prev;
+        const next = new Set(prev);
+        next.delete(soundId);
+        return next;
+      });
+    },
+    [setHiddenSounds],
+  );
+
+  const unhideSound = useCallback(
+    (soundId: string) => {
+      setHiddenSounds((prev) => {
+        const next = new Set(prev);
+        next.delete(soundId);
+        return next;
+      });
+    },
+    [setHiddenSounds],
+  );
+
+  const isSoundHidden = useCallback(
+    (soundId: string) => hiddenSounds.has(soundId),
+    [hiddenSounds],
+  );
+
   const updateSettings = useCallback(
     (patch: Partial<AppSettings>) => {
       setSettings((prev) => ({ ...prev, ...patch }));
@@ -230,19 +296,34 @@ export function SoundboardProvider({ children }: { children: ReactNode }) {
   const filteredSounds = useMemo(() => {
     let result = sounds;
 
-    if (viewFilter === "favorites") {
-      result = result.filter((s) => favorites.has(s.id));
-    } else if (viewFilter === "recent") {
-      result = recentIds
-        .map((id) => sounds.find((s) => s.id === id))
-        .filter((s): s is Sound => Boolean(s));
-    } else if (viewFilter === "trending") {
-      result = [...sounds]
-        .sort((a, b) => (playCounts[b.id] ?? 0) - (playCounts[a.id] ?? 0))
-        .slice(0, TRENDING_LIMIT);
+    if (viewFilter === "hidden") {
+      result = result.filter((s) => hiddenSounds.has(s.id));
+    } else {
+      result = result.filter((s) => !hiddenSounds.has(s.id));
+
+      if (viewFilter === "favorites") {
+        result = result.filter((s) => favorites.has(s.id));
+      } else if (viewFilter === "recent") {
+        result = recentIds
+          .map((id) => sounds.find((s) => s.id === id))
+          .filter((s): s is Sound => Boolean(s && !hiddenSounds.has(s.id)));
+      } else if (viewFilter === "trending") {
+        result = [...result]
+          .sort((a, b) => (playCounts[b.id] ?? 0) - (playCounts[a.id] ?? 0))
+          .slice(0, TRENDING_LIMIT);
+      } else if (viewFilter === "playlist" && activePlaylistId) {
+        const playlist = playlists.find((p) => p.id === activePlaylistId);
+        if (playlist) {
+          result = playlist.soundIds
+            .map((id) => sounds.find((s) => s.id === id))
+            .filter((s): s is Sound => Boolean(s && !hiddenSounds.has(s.id)));
+        } else {
+          result = [];
+        }
+      }
     }
 
-    if (activeCategory !== "All") {
+    if (activeCategory !== "All" && viewFilter !== "playlist" && viewFilter !== "hidden") {
       result = result.filter((s) => s.category === activeCategory);
     }
 
@@ -260,34 +341,44 @@ export function SoundboardProvider({ children }: { children: ReactNode }) {
   }, [
     sounds,
     viewFilter,
+    hiddenSounds,
     favorites,
     recentIds,
     playCounts,
     activeCategory,
     searchQuery,
+    activePlaylistId,
+    playlists,
   ]);
+
+  const visibleSoundCount = useMemo(
+    () => sounds.filter((s) => !hiddenSounds.has(s.id)).length,
+    [sounds, hiddenSounds],
+  );
 
   const trendingSounds = useMemo(
     () =>
       [...sounds]
+        .filter((s) => !hiddenSounds.has(s.id))
         .sort((a, b) => (playCounts[b.id] ?? 0) - (playCounts[a.id] ?? 0))
         .slice(0, TRENDING_LIMIT),
-    [sounds, playCounts],
+    [sounds, playCounts, hiddenSounds],
   );
 
   const playRandom = useCallback(
     (fromCategory = false) => {
+      const visible = sounds.filter((s) => !hiddenSounds.has(s.id));
       const pool =
         fromCategory && activeCategory !== "All"
-          ? sounds.filter((s) => s.category === activeCategory)
+          ? visible.filter((s) => s.category === activeCategory)
           : filteredSounds.length > 0
             ? filteredSounds
-            : sounds;
+            : visible;
       if (pool.length === 0) return;
       const pick = pool[Math.floor(Math.random() * pool.length)];
       playSound(pick);
     },
-    [activeCategory, filteredSounds, sounds, playSound],
+    [activeCategory, filteredSounds, sounds, hiddenSounds, playSound],
   );
 
   const addCustomSound = useCallback(
@@ -342,6 +433,110 @@ export function SoundboardProvider({ children }: { children: ReactNode }) {
   const clearRecent = useCallback(() => setRecentIds([]), [setRecentIds]);
   const clearPlayCounts = useCallback(() => setPlayCounts({}), [setPlayCounts]);
 
+  const getOriginalTitle = useCallback(
+    (soundId: string) => baseSounds.find((s) => s.id === soundId)?.title ?? "",
+    [baseSounds],
+  );
+
+  const renameSound = useCallback(
+    (soundId: string, title: string) => {
+      const trimmed = title.trim();
+      if (!trimmed) return;
+      setCustomNames((prev) => ({ ...prev, [soundId]: trimmed }));
+    },
+    [setCustomNames],
+  );
+
+  const resetSoundName = useCallback(
+    (soundId: string) => {
+      setCustomNames((prev) => {
+        const next = { ...prev };
+        delete next[soundId];
+        return next;
+      });
+    },
+    [setCustomNames],
+  );
+
+  const createPlaylist = useCallback(
+    (name: string, emoji = "📁") => {
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      const playlist: Playlist = {
+        id: generateId(),
+        name: trimmed,
+        emoji: emoji || "📁",
+        soundIds: [],
+        createdAt: Date.now(),
+      };
+      setPlaylists((prev) => [playlist, ...prev].slice(0, MAX_PLAYLISTS));
+    },
+    [setPlaylists],
+  );
+
+  const updatePlaylist = useCallback(
+    (playlistId: string, patch: Partial<Pick<Playlist, "name" | "emoji">>) => {
+      setPlaylists((prev) =>
+        prev.map((p) => (p.id === playlistId ? { ...p, ...patch } : p)),
+      );
+    },
+    [setPlaylists],
+  );
+
+  const deletePlaylist = useCallback(
+    (playlistId: string) => {
+      setPlaylists((prev) => prev.filter((p) => p.id !== playlistId));
+      setActivePlaylistId((current) => (current === playlistId ? null : current));
+      setViewFilter((current) => (current === "playlist" ? "all" : current));
+    },
+    [setPlaylists],
+  );
+
+  const addSoundToPlaylist = useCallback(
+    (playlistId: string, soundId: string) => {
+      setPlaylists((prev) =>
+        prev.map((p) =>
+          p.id === playlistId && !p.soundIds.includes(soundId)
+            ? { ...p, soundIds: [...p.soundIds, soundId] }
+            : p,
+        ),
+      );
+    },
+    [setPlaylists],
+  );
+
+  const removeSoundFromPlaylist = useCallback(
+    (playlistId: string, soundId: string) => {
+      setPlaylists((prev) =>
+        prev.map((p) =>
+          p.id === playlistId
+            ? { ...p, soundIds: p.soundIds.filter((id) => id !== soundId) }
+            : p,
+        ),
+      );
+    },
+    [setPlaylists],
+  );
+
+  const isSoundInPlaylist = useCallback(
+    (playlistId: string, soundId: string) => {
+      const playlist = playlists.find((p) => p.id === playlistId);
+      return playlist?.soundIds.includes(soundId) ?? false;
+    },
+    [playlists],
+  );
+
+  const selectPlaylist = useCallback((playlistId: string | null) => {
+    setActivePlaylistId(playlistId);
+    setViewFilter(playlistId ? "playlist" : "all");
+  }, []);
+
+  const handleSetViewFilter = useCallback((filter: ViewFilter) => {
+    setViewFilter(filter);
+    if (filter !== "playlist") setActivePlaylistId(null);
+    if (filter === "hidden" || filter === "playlist") setActiveCategory("All");
+  }, []);
+
   const getSoundBySlug = useCallback(
     (slug: string) => sounds.find((s) => s.slug === slug),
     [sounds],
@@ -363,14 +558,22 @@ export function SoundboardProvider({ children }: { children: ReactNode }) {
   const value: SoundboardContextValue = {
     sounds,
     filteredSounds,
+    playlists,
+    activePlaylistId,
     searchQuery,
     setSearchQuery,
     activeCategory,
     setActiveCategory,
     viewFilter,
-    setViewFilter,
+    setViewFilter: handleSetViewFilter,
+    selectPlaylist,
     favorites,
+    hiddenSounds,
     toggleFavorite,
+    hideSound,
+    unhideSound,
+    isSoundHidden,
+    visibleSoundCount,
     recentIds,
     playCounts,
     trendingSounds,
@@ -387,6 +590,15 @@ export function SoundboardProvider({ children }: { children: ReactNode }) {
     playRandom,
     addCustomSound,
     removeCustomSound,
+    renameSound,
+    resetSoundName,
+    getOriginalTitle,
+    createPlaylist,
+    updatePlaylist,
+    deletePlaylist,
+    addSoundToPlaylist,
+    removeSoundFromPlaylist,
+    isSoundInPlaylist,
     clearFavorites,
     clearRecent,
     clearPlayCounts,

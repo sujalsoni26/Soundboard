@@ -5,13 +5,17 @@ export const STORAGE_KEYS = {
   recent: "soundboard:recent",
   playCounts: "soundboard:playCounts",
   customSounds: "soundboard:customSounds",
+  customNames: "soundboard:customNames",
+  playlists: "soundboard:playlists",
+  hiddenSounds: "soundboard:hiddenSounds",
   shortcuts: "soundboard:shortcuts",
   settings: "soundboard:settings",
+  sidebarVisible: "soundboard:sidebarVisible",
 } as const;
 
 export const DEFAULT_SETTINGS: AppSettings = {
   volume: 0.85,
-  overlapMode: "overlap",
+  overlapMode: "single",
   shareMode: "mp3",
   autoplayOnShare: true,
   vibrationEnabled: true,
@@ -42,6 +46,7 @@ export const CATEGORY_EMOJI: Record<SoundCategory, string> = {
 };
 
 export const MAX_CUSTOM_SOUNDS = 50;
+export const MAX_PLAYLISTS = 30;
 export const PRELOAD_BATCH_SIZE = 8;
 export const TRENDING_LIMIT = 8;
 
