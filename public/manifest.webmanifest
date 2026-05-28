@@ -1,0 +1,27 @@
+{
+  "name": "Meme Soundboard",
+  "short_name": "Soundboard",
+  "description": "Instant meme soundboard with offline support",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#08080f",
+  "theme_color": "#8b5cf6",
+  "orientation": "portrait-primary",
+  "categories": ["entertainment", "music"],
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [],
+  "prefer_related_applications": false
+}
