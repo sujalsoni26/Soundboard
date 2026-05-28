@@ -24,6 +24,8 @@ export interface Sound {
   favorite?: boolean;
   playCount?: number;
   isCustom?: boolean;
+  pendingApproval?: boolean;
+  submissionId?: string;
   createdAt?: number;
 }
 

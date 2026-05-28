@@ -52,8 +52,8 @@ export function ActiveFilterBar() {
           type="button"
           onClick={chip.onClear}
           className={cn(
-            "inline-flex max-w-full items-center gap-1 rounded-full border border-[var(--accent-chip-border)]",
-            "bg-[var(--accent-chip)] px-2.5 py-1 text-xs font-medium text-[var(--accent-chip-text)]",
+            "inline-flex max-w-full min-h-11 touch-manipulation items-center gap-1.5 rounded-full border border-[var(--accent-chip-border)]",
+            "bg-[var(--accent-chip)] px-3 py-2 text-xs font-medium text-[var(--accent-chip-text)] active:opacity-90",
           )}
         >
           <span className="truncate">{chip.label}</span>

@@ -27,7 +27,7 @@ export function ErrorToast() {
         type="button"
         aria-label="Dismiss"
         onClick={clearPlaybackError}
-        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg active:bg-red-500/10"
+        className="inline-flex h-10 w-10 shrink-0 touch-manipulation items-center justify-center rounded-lg active:bg-red-500/10"
       >
         <X className="h-4 w-4" />
       </button>

@@ -6,15 +6,19 @@ import {
   Dice5,
   Keyboard,
   ListMusic,
+  LogOut,
   PanelLeftClose,
   Settings,
+  Shield,
   Shuffle,
   Square,
   Upload,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { useEffect } from "react";
 import { CATEGORY_EMOJI, CATEGORIES, SITE_LOGO } from "@/lib/constants";
+import { useAuth } from "@/hooks/use-auth";
 import { useLockBodyScroll } from "@/hooks/use-lock-body-scroll";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useSoundboard, type ViewFilter } from "@/hooks/use-soundboard";
@@ -67,6 +71,7 @@ export function Sidebar({
     playingIds,
   } = useSoundboard();
 
+  const { user, profile, signOut, isAdmin, configured } = useAuth();
   const isDesktop = useMediaQuery("(min-width: 1024px)");
   useLockBodyScroll(mobileOpen);
 
@@ -206,10 +211,37 @@ export function Sidebar({
             />
           )}
         </SidebarSection>
+
+        {configured && user && (
+          <SidebarSection title="Account">
+            <p className="truncate px-2 pb-1 text-xs text-muted" title={profile?.email ?? undefined}>
+              {profile?.email ?? "Signed in"}
+            </p>
+            {isAdmin && (
+              <Link
+                href="/admin"
+                onClick={onClose}
+                className="flex min-h-[44px] w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm text-foreground/85 active:bg-surface-hover lg:min-h-0 lg:rounded-lg lg:px-2 lg:py-1.5 lg:hover:bg-surface-hover"
+              >
+                <Shield className="h-4 w-4 shrink-0" />
+                <span className="truncate">Admin</span>
+              </Link>
+            )}
+            <SidebarAction
+              icon={<LogOut className="h-4 w-4" />}
+              label="Sign out"
+              onClick={() => {
+                void signOut();
+                onClose();
+              }}
+              variant="danger"
+            />
+          </SidebarSection>
+        )}
       </div>
 
       <div className="shrink-0 space-y-3 border-t border-card-border px-3 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 py-1">
           <span className="w-6 text-[10px] text-muted">Vol</span>
           <input
             type="range"
@@ -219,21 +251,30 @@ export function Sidebar({
             value={settings.volume}
             onChange={(e) => updateSettings({ volume: Number(e.target.value) })}
             aria-label="Volume"
-            className="h-2 flex-1 cursor-pointer accent-violet-500"
+            className="h-3 flex-1 cursor-pointer accent-violet-500 lg:h-2"
           />
           <span className="w-7 text-right text-[10px] text-muted">{Math.round(settings.volume * 100)}</span>
         </div>
 
-        <div className="grid grid-cols-4 gap-1.5">
+        <div
+          className={cn(
+            "grid gap-1.5",
+            user ? (isDesktop ? "grid-cols-4" : "grid-cols-3") : isDesktop ? "grid-cols-3" : "grid-cols-2",
+          )}
+        >
           <SidebarIconButton label="Playlists" onClick={onOpenPlaylists}>
             <ListMusic className="h-4 w-4" />
           </SidebarIconButton>
-          <SidebarIconButton label="Upload" onClick={onOpenUpload}>
-            <Upload className="h-4 w-4" />
-          </SidebarIconButton>
-          <SidebarIconButton label="Shortcuts" onClick={onOpenShortcuts}>
-            <Keyboard className="h-4 w-4" />
-          </SidebarIconButton>
+          {user && (
+            <SidebarIconButton label="Upload" onClick={onOpenUpload}>
+              <Upload className="h-4 w-4" />
+            </SidebarIconButton>
+          )}
+          {isDesktop && (
+            <SidebarIconButton label="Shortcuts" onClick={onOpenShortcuts}>
+              <Keyboard className="h-4 w-4" />
+            </SidebarIconButton>
+          )}
           <SidebarIconButton label="Settings" onClick={onOpenSettings}>
             <Settings className="h-4 w-4" />
           </SidebarIconButton>

@@ -4,15 +4,19 @@ import { motion } from "framer-motion";
 import { X } from "lucide-react";
 import { useState } from "react";
 import { PlaylistsModal } from "@/components/SoundManageModals";
+import { useAuth } from "@/hooks/use-auth";
+import { useLockBodyScroll } from "@/hooks/use-lock-body-scroll";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { useSoundboard } from "@/hooks/use-soundboard";
-import type { OverlapMode, ShareMode } from "@/types/sound";
+import { CATEGORIES, CATEGORY_EMOJI, MAX_UPLOAD_BYTES } from "@/lib/constants";
+import type { OverlapMode, ShareMode, SoundCategory } from "@/types/sound";
 import { cn, isValidAudioFile } from "@/utils/cn";
 
 const selectClassName =
-  "w-full cursor-pointer appearance-none rounded-xl border border-card-border bg-input px-3 py-2.5 text-sm text-foreground shadow-inner outline-none focus:border-violet-400/50 focus:ring-2 focus:ring-violet-400/20";
+  "w-full min-h-11 cursor-pointer appearance-none rounded-xl border border-card-border bg-input px-3 py-2.5 text-base text-foreground shadow-inner outline-none focus:border-violet-400/50 focus:ring-2 focus:ring-violet-400/20 sm:text-sm";
 
 const inputClassName =
-  "w-full rounded-xl border border-card-border bg-input px-3 py-2 text-sm text-foreground placeholder:text-muted";
+  "w-full min-h-11 rounded-xl border border-card-border bg-input px-3 py-2.5 text-base text-foreground placeholder:text-muted sm:text-sm";
 
 interface ModalProps {
   open: boolean;
@@ -22,6 +26,7 @@ interface ModalProps {
 }
 
 export function Modal({ open, onClose, title, children }: ModalProps) {
+  useLockBodyScroll(open);
   if (!open) return null;
 
   return (
@@ -29,7 +34,7 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
       <button
         type="button"
         aria-label="Close modal backdrop"
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        className="absolute inset-0 touch-none bg-black/70 backdrop-blur-sm"
         onClick={onClose}
       />
       <motion.div
@@ -148,7 +153,7 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
                   <button
                     type="button"
                     onClick={() => removeShortcut(s.soundId)}
-                    className="text-xs text-red-600 dark:text-red-300 hover:underline"
+                    className="min-h-9 touch-manipulation px-2 text-xs text-red-600 active:opacity-80 dark:text-red-300 sm:hover:underline"
                   >
                     Remove
                   </button>
@@ -170,6 +175,7 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
 
 export function ShortcutsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { sounds, shortcuts, setShortcut, removeShortcut } = useSoundboard();
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
   const [selectedSound, setSelectedSound] = useState(sounds[0]?.id ?? "");
   const [keyInput, setKeyInput] = useState("");
 
@@ -178,6 +184,42 @@ export function ShortcutsModal({ open, onClose }: { open: boolean; onClose: () =
     setShortcut(selectedSound, keyInput);
     setKeyInput("");
   };
+
+  if (!isDesktop) {
+    return (
+      <Modal open={open} onClose={onClose} title="Keyboard Shortcuts">
+        <p className="text-sm text-muted">
+          Keyboard shortcuts are available on desktop. Use tap-to-play on mobile — tap any sound
+          card to play it instantly.
+        </p>
+        {shortcuts.length > 0 && (
+          <ul className="mt-4 space-y-2 text-sm">
+            {shortcuts.map((s) => {
+              const sound = sounds.find((x) => x.id === s.soundId);
+              return (
+                <li
+                  key={s.soundId}
+                  className="flex items-center justify-between gap-3 rounded-xl bg-surface px-3 py-2.5 text-foreground"
+                >
+                  <span className="min-w-0 truncate">
+                    <kbd className="rounded bg-surface-hover px-2 py-0.5">{s.key.toUpperCase()}</kbd>{" "}
+                    {sound?.title}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => removeShortcut(s.soundId)}
+                    className="min-h-9 shrink-0 touch-manipulation px-2 text-xs text-red-600 dark:text-red-300"
+                  >
+                    Remove
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Modal>
+    );
+  }
 
   return (
     <Modal open={open} onClose={onClose} title="Keyboard Shortcuts">
@@ -210,7 +252,7 @@ export function ShortcutsModal({ open, onClose }: { open: boolean; onClose: () =
         <button
           type="button"
           onClick={handleAssign}
-          className="w-full rounded-xl bg-violet-500 py-2.5 text-sm font-medium text-white hover:bg-violet-400"
+          className="min-h-11 w-full touch-manipulation rounded-xl bg-violet-500 py-2.5 text-sm font-medium text-white active:opacity-90 sm:hover:bg-violet-400"
         >
           Assign shortcut
         </button>
@@ -272,20 +314,28 @@ export function useAppModals() {
 }
 
 export function UploadModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { addCustomSound } = useSoundboard();
+  const { addPrivateSound } = useSoundboard();
+  const { user } = useAuth();
   const [title, setTitle] = useState("");
   const [emoji, setEmoji] = useState("🎵");
   const [tags, setTags] = useState("");
+  const [category, setCategory] = useState<SoundCategory>("Custom");
   const [file, setFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  if (!user) return null;
 
   const reset = () => {
     setTitle("");
     setEmoji("🎵");
     setTags("");
+    setCategory("Custom");
     setFile(null);
     setError(null);
+    setStatus(null);
   };
 
   const handleFile = (f: File) => {
@@ -303,28 +353,54 @@ export function UploadModal({ open, onClose }: { open: boolean; onClose: () => v
       setError("Title and audio file are required.");
       return;
     }
-    if (file.size > 2 * 1024 * 1024) {
-      setError("File must be under 2MB for local storage.");
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setError(`File must be under ${Math.round(MAX_UPLOAD_BYTES / (1024 * 1024))}MB.`);
       return;
     }
-    const dataUrl = await fileToDataUrl(file);
-    addCustomSound({
-      title: title.trim(),
-      file: dataUrl,
-      category: "Custom",
-      tags: tags
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean),
-      emoji: emoji || "🎵",
-      duration: 0,
-    });
-    reset();
-    onClose();
+
+    setUploading(true);
+    setError(null);
+    setStatus(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("title", title.trim());
+      formData.append("emoji", emoji || "🎵");
+      formData.append("tags", tags);
+      formData.append("category", category);
+
+      const res = await fetch("/api/sounds/submit", {
+        method: "POST",
+        body: formData,
+      });
+      const json = (await res.json()) as {
+        sound?: import("@/types/sound").Sound;
+        message?: string;
+        error?: string;
+      };
+
+      if (!res.ok) throw new Error(json.error ?? "Upload failed.");
+
+      if (json.sound) addPrivateSound(json.sound);
+      setStatus(json.message ?? "Submitted for admin review.");
+      reset();
+      onClose();
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : "Upload failed.");
+    } finally {
+      setUploading(false);
+    }
   };
 
+  const maxMb = Math.round(MAX_UPLOAD_BYTES / (1024 * 1024));
+
   return (
-    <Modal open={open} onClose={onClose} title="Upload Custom Sound">
+    <Modal open={open} onClose={onClose} title="Upload Sound">
+      <p className="mb-3 text-xs text-muted">
+        Uploads are reviewed by an admin. Until approved, the sound is private to your account
+        (max {maxMb}MB).
+      </p>
       <div
         onDragOver={(e) => {
           e.preventDefault();
@@ -338,12 +414,13 @@ export function UploadModal({ open, onClose }: { open: boolean; onClose: () => v
           if (f) handleFile(f);
         }}
         className={cn(
-          "mb-4 rounded-2xl border-2 border-dashed p-8 text-center transition-colors",
+          "mb-4 rounded-2xl border-2 border-dashed p-6 text-center transition-colors sm:p-8",
           dragOver ? "border-violet-400 bg-violet-500/10" : "border-card-border bg-surface",
         )}
       >
-        <p className="text-sm text-foreground">Drag & drop an audio file here</p>
-        <label className="mt-3 inline-block cursor-pointer rounded-xl bg-surface px-4 py-2 text-sm text-foreground hover:bg-surface-hover">
+        <p className="text-sm text-foreground sm:hidden">Choose an audio file to upload</p>
+        <p className="hidden text-sm text-foreground sm:block">Drag & drop an audio file here</p>
+        <label className="mt-3 inline-flex min-h-11 cursor-pointer touch-manipulation items-center rounded-xl bg-surface px-4 py-2.5 text-sm text-foreground active:bg-surface-hover sm:hover:bg-surface-hover">
           Browse files
           <input
             type="file"
@@ -378,26 +455,30 @@ export function UploadModal({ open, onClose }: { open: boolean; onClose: () => v
           placeholder="Tags (comma separated)"
           className={inputClassName}
         />
+        <select
+          value={category}
+          onChange={(e) => setCategory(e.target.value as SoundCategory)}
+          className={selectClassName}
+        >
+          {CATEGORIES.map((cat) => (
+            <option key={cat} value={cat}>
+              {CATEGORY_EMOJI[cat]} {cat}
+            </option>
+          ))}
+        </select>
         {error && <p className="text-sm text-red-600 dark:text-red-300">{error}</p>}
+        {status && <p className="text-sm text-accent-text">{status}</p>}
         <button
           type="button"
-          onClick={handleSubmit}
-          className="w-full rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 py-2.5 text-sm font-medium text-white"
+          disabled={uploading}
+          onClick={() => void handleSubmit()}
+          className="min-h-11 w-full touch-manipulation rounded-xl bg-gradient-to-r from-violet-500 to-fuchsia-500 py-2.5 text-sm font-medium text-white active:opacity-90 disabled:opacity-60"
         >
-          Save to soundboard
+          {uploading ? "Uploading…" : "Submit for review"}
         </button>
       </div>
     </Modal>
   );
-}
-
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -420,7 +501,7 @@ function DangerButton({
     <button
       type="button"
       onClick={onClick}
-      className="rounded-xl bg-red-500/10 px-3 py-2 text-xs text-red-600 dark:text-red-300 hover:bg-red-500/20"
+      className="min-h-11 touch-manipulation rounded-xl bg-red-500/10 px-3 py-2.5 text-xs text-red-600 active:bg-red-500/20 dark:text-red-300 sm:hover:bg-red-500/20"
     >
       {children}
     </button>

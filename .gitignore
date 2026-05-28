@@ -30,8 +30,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files (never commit secrets)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -40,7 +41,18 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# pwa
+# OS
+Thumbs.db
+Desktop.ini
+ehthumbs.db
+
+# IDE
+.idea/
+
+# turbo
+.turbo
+
+# pwa (generated at build / postinstall)
 public/sw.js
 public/sw.js.map
 public/workbox-*.js

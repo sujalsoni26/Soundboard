@@ -3,11 +3,14 @@
 import { PanelLeft, PanelLeftClose } from "lucide-react";
 import { useCallback, useState } from "react";
 import { ActiveFilterBar } from "@/components/ActiveFilterBar";
+import { AuthButton } from "@/components/AuthButton";
+import { WelcomeAuthPrompt } from "@/components/WelcomeAuthPrompt";
 import { ErrorToast } from "@/components/ErrorToast";
 import { FloatingStopButton } from "@/components/FloatingStopButton";
 import { useAppModals } from "@/components/Modals";
 import { SearchBar } from "@/components/SearchBar";
 import { Sidebar } from "@/components/Sidebar";
+import { SiteBanner } from "@/components/SiteBanner";
 import { SoundGrid } from "@/components/SoundGrid";
 import { TrendingSection } from "@/components/TrendingSection";
 import { useLocalStorage } from "@/hooks/use-local-storage";
@@ -69,9 +72,11 @@ export function SoundboardApp() {
           <div className="min-w-0 flex-1">
             <SearchBar compact />
           </div>
+          <AuthButton compact />
         </header>
 
         <main className="flex-1">
+          <SiteBanner />
           <ActiveFilterBar />
           <TrendingSection />
           <p className="mb-2 text-xs text-muted">{filteredSounds.length} sounds</p>
@@ -82,6 +87,7 @@ export function SoundboardApp() {
       </div>
 
       <FloatingStopButton hidden={mobileOpen || isModalOpen} />
+      <WelcomeAuthPrompt />
       {modalHost}
     </div>
   );

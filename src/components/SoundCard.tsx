@@ -31,7 +31,7 @@ export function SoundCard({ sound, index = 0 }: SoundCardProps) {
         transition={{ delay: Math.min(index * 0.02, 0.3) }}
         className={cn(
           "group relative flex h-full w-full max-w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-card-border bg-card p-2.5 sm:p-4",
-          "transition-colors hover:border-violet-400/30 hover:bg-surface-hover",
+          "transition-colors active:bg-surface-hover sm:hover:border-violet-400/30 sm:hover:bg-surface-hover",
           isPlaying && "border-violet-400/50 shadow-lg shadow-violet-500/20",
         )}
       >
@@ -54,6 +54,9 @@ export function SoundCard({ sound, index = 0 }: SoundCardProps) {
           </h3>
           <p className="mt-0.5 w-full min-w-0 truncate text-[11px] text-muted sm:mt-1 sm:text-xs">
             {sound.category}
+            {sound.pendingApproval && (
+              <span className="ml-1 text-amber-600 dark:text-amber-300">· Pending review</span>
+            )}
           </p>
           {(playCounts[sound.id] ?? 0) > 0 && (
             <p className="mt-1 w-full min-w-0 truncate text-[11px] text-muted sm:text-xs">
@@ -80,7 +83,7 @@ export function SoundCard({ sound, index = 0 }: SoundCardProps) {
             <Link
               href={`/sound/${sound.slug}`}
               aria-label={`Open ${sound.title} page`}
-              className="inline-flex aspect-square w-full min-h-[40px] min-w-0 max-w-full touch-manipulation items-center justify-center rounded-lg bg-surface text-muted active:bg-surface-hover active:text-foreground sm:min-h-0 sm:rounded-xl"
+              className="inline-flex aspect-square w-full min-h-[44px] min-w-0 max-w-full touch-manipulation items-center justify-center rounded-lg bg-surface text-muted active:bg-surface-hover active:text-foreground sm:min-h-0 sm:rounded-xl"
             >
               <Volume2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             </Link>
@@ -91,7 +94,7 @@ export function SoundCard({ sound, index = 0 }: SoundCardProps) {
               type="button"
               whileTap={{ scale: 0.98 }}
               onClick={() => toggleSound(sound)}
-              className="mt-1.5 flex w-full min-w-0 items-center justify-center gap-1.5 overflow-hidden rounded-lg bg-red-500/15 px-2 py-1.5 text-xs font-medium text-red-600 dark:text-red-300 hover:bg-red-500/25 sm:mt-2"
+              className="mt-1.5 flex w-full min-w-0 items-center justify-center gap-1.5 overflow-hidden rounded-lg bg-red-500/15 px-2 py-2 text-xs font-medium text-red-600 active:bg-red-500/25 dark:text-red-300 sm:mt-2 sm:py-1.5 sm:hover:bg-red-500/25"
               aria-label={`Stop ${sound.title}`}
             >
               <Square className="h-3 w-3 shrink-0 fill-current" />
@@ -127,7 +130,7 @@ function IconButton({
         onClick();
       }}
       className={cn(
-        "inline-flex aspect-square w-full min-h-[40px] min-w-0 max-w-full touch-manipulation items-center justify-center rounded-lg bg-surface text-muted active:bg-surface-hover active:text-foreground sm:min-h-0 sm:rounded-xl",
+        "inline-flex aspect-square w-full min-h-[44px] min-w-0 max-w-full touch-manipulation items-center justify-center rounded-lg bg-surface text-muted active:bg-surface-hover active:text-foreground sm:min-h-0 sm:rounded-xl",
         "sm:hover:bg-surface-hover sm:hover:text-foreground",
         active && "bg-pink-500/15 text-pink-500 dark:text-pink-300",
       )}

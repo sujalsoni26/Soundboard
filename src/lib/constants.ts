@@ -11,6 +11,8 @@ export const STORAGE_KEYS = {
   shortcuts: "soundboard:shortcuts",
   settings: "soundboard:settings",
   sidebarVisible: "soundboard:sidebarVisible",
+  authGuestSkipped: "soundboard:authGuestSkipped",
+  processedApprovals: "soundboard:processedApprovals",
 } as const;
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -49,6 +51,14 @@ export const MAX_CUSTOM_SOUNDS = 50;
 export const MAX_PLAYLISTS = 30;
 export const PRELOAD_BATCH_SIZE = 8;
 export const TRENDING_LIMIT = 8;
+
+/** Max audio upload size (3 MB) — enforced client + server */
+export const MAX_UPLOAD_BYTES = 3 * 1024 * 1024;
+
+export const STORAGE_BUCKETS = {
+  catalog: "catalog-sounds",
+  submissions: "user-submissions",
+} as const;
 
 export const SITE_LOGO = "/icons/soundboard logo.png";
 export const FAVICON = "/favicon.png";

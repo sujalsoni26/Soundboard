@@ -187,7 +187,7 @@ export function PlaylistsModal({ open, onClose }: { open: boolean; onClose: () =
               type="button"
               whileTap={{ scale: 0.95 }}
               onClick={handleCreate}
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-500 text-white"
+              className="inline-flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center rounded-xl bg-violet-500 text-white active:opacity-90"
               aria-label="Create playlist"
             >
               <Plus className="h-5 w-5" />
@@ -228,7 +228,7 @@ export function PlaylistsModal({ open, onClose }: { open: boolean; onClose: () =
                           onClose();
                         }}
                         className={cn(
-                          "text-left text-base font-semibold text-foreground hover:text-accent-text",
+                          "min-h-11 min-w-0 flex-1 touch-manipulation rounded-xl py-2 text-left text-base font-semibold text-foreground active:text-accent-text sm:hover:text-accent-text",
                           activePlaylistId === playlist.id && "text-accent-text",
                         )}
                       >
@@ -246,7 +246,7 @@ export function PlaylistsModal({ open, onClose }: { open: boolean; onClose: () =
                             if (editName.trim()) updatePlaylist(playlist.id, { name: editName.trim() });
                             setEditingId(null);
                           }}
-                          className="rounded-lg px-2 py-1 text-xs text-violet-400"
+                          className="min-h-11 touch-manipulation rounded-lg px-3 py-2 text-xs text-violet-400 active:opacity-80"
                         >
                           Save
                         </button>
@@ -258,7 +258,7 @@ export function PlaylistsModal({ open, onClose }: { open: boolean; onClose: () =
                             setEditName(playlist.name);
                           }}
                           aria-label="Rename playlist"
-                          className="rounded-lg p-1.5 text-muted hover:bg-surface-hover hover:text-foreground"
+                          className="inline-flex h-10 w-10 touch-manipulation items-center justify-center rounded-lg text-muted active:bg-surface-hover active:text-foreground sm:hover:bg-surface-hover sm:hover:text-foreground"
                         >
                           <Pencil className="h-4 w-4" />
                         </button>
@@ -266,7 +266,7 @@ export function PlaylistsModal({ open, onClose }: { open: boolean; onClose: () =
                       <button
                         type="button"
                         onClick={() => deletePlaylist(playlist.id)}
-                        className="rounded-lg px-2 py-1 text-xs text-red-600 dark:text-red-300"
+                        className="min-h-11 touch-manipulation rounded-lg px-3 py-2 text-xs text-red-600 active:bg-red-500/10 dark:text-red-300"
                       >
                         Delete
                       </button>
@@ -283,7 +283,7 @@ export function PlaylistsModal({ open, onClose }: { open: boolean; onClose: () =
                           <button
                             type="button"
                             onClick={() => removeSoundFromPlaylist(playlist.id, s.id)}
-                            className="shrink-0 text-xs text-red-600 dark:text-red-300"
+                            className="min-h-9 shrink-0 touch-manipulation px-2 text-xs text-red-600 active:opacity-80 dark:text-red-300"
                           >
                             Remove
                           </button>

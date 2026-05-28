@@ -11,10 +11,16 @@ import {
   type ReactNode,
 } from "react";
 import { SAMPLE_SOUNDS } from "@/data/sounds";
+import { useAuth } from "@/hooks/use-auth";
+import { useCloudSync } from "@/hooks/use-cloud-sync";
+import { applyApprovalToSyncData } from "@/lib/approval-cleanup";
+import { buildSyncPayload } from "@/lib/build-sync-payload";
 import { useLocalStorage, useLocalStorageSet } from "@/hooks/use-local-storage";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { audioManager } from "@/lib/audio-manager";
 import {
   DEFAULT_SETTINGS,
+  MAX_CUSTOM_SOUNDS,
   MAX_PLAYLISTS,
   PRELOAD_BATCH_SIZE,
   STORAGE_KEYS,
@@ -23,12 +29,15 @@ import {
 import type { AppSettings, KeyboardShortcut, Playlist, Sound, SoundCategory } from "@/types/sound";
 import { generateId, slugify, vibrate } from "@/utils/cn";
 import { shareSound } from "@/utils/share-sound";
+import { getItem, setItem } from "@/utils/storage";
 
 export type ViewFilter = "all" | "favorites" | "recent" | "trending" | "playlist" | "hidden";
 
 interface SoundboardContextValue {
   sounds: Sound[];
   filteredSounds: Sound[];
+  catalogSource: "supabase" | "local" | "loading";
+  refreshCatalog: () => Promise<void>;
   playlists: Playlist[];
   activePlaylistId: string | null;
   searchQuery: string;
@@ -60,6 +69,7 @@ interface SoundboardContextValue {
   stopAllSounds: () => void;
   playRandom: (fromCategory?: boolean) => void;
   addCustomSound: (sound: Omit<Sound, "id" | "slug" | "isCustom" | "createdAt">) => void;
+  addPrivateSound: (sound: Sound) => void;
   removeCustomSound: (soundId: string) => void;
   renameSound: (soundId: string, title: string) => void;
   resetSoundName: (soundId: string) => void;
@@ -81,10 +91,20 @@ interface SoundboardContextValue {
 
 const SoundboardContext = createContext<SoundboardContextValue | null>(null);
 
-function mergeSounds(customSounds: Sound[]): Sound[] {
+function mergeSounds(catalog: Sound[], customSounds: Sound[]): Sound[] {
+  const catalogIds = new Set(catalog.map((s) => s.id));
   const map = new Map<string, Sound>();
-  SAMPLE_SOUNDS.forEach((s) => map.set(s.id, s));
-  customSounds.forEach((s) => map.set(s.id, s));
+  catalog.forEach((s) => map.set(s.id, s));
+  customSounds.forEach((s) => {
+    if (catalogIds.has(s.id)) return;
+    if (
+      s.pendingApproval &&
+      catalog.some((c) => c.title === s.title && c.emoji === s.emoji)
+    ) {
+      return;
+    }
+    map.set(s.id, s);
+  });
   return Array.from(map.values());
 }
 
@@ -96,6 +116,7 @@ function applyCustomNames(baseSounds: Sound[], customNames: Record<string, strin
 }
 
 export function SoundboardProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
   const [customSounds, setCustomSounds] = useLocalStorage<Sound[]>(
     STORAGE_KEYS.customSounds,
     [],
@@ -125,6 +146,156 @@ export function SoundboardProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const [catalogSounds, setCatalogSounds] = useState<Sound[]>(SAMPLE_SOUNDS);
+  const [catalogSource, setCatalogSource] = useState<"supabase" | "local" | "loading">("loading");
+
+  const syncStateRef = useRef({
+    favorites,
+    hiddenSounds,
+    customNames,
+    playlists,
+    recentIds,
+    playCounts,
+    settings: mergedSettings,
+    shortcuts,
+    customSounds,
+  });
+  syncStateRef.current = {
+    favorites,
+    hiddenSounds,
+    customNames,
+    playlists,
+    recentIds,
+    playCounts,
+    settings: mergedSettings,
+    shortcuts,
+    customSounds,
+  };
+
+  const loadCatalog = useCallback(async () => {
+    try {
+      const res = await fetch("/api/sounds/catalog");
+      if (!res.ok) return;
+      const json = (await res.json()) as {
+        sounds?: Sound[];
+        source?: "supabase" | "local";
+      };
+      if (json.sounds?.length) {
+        setCatalogSounds(json.sounds);
+        setCatalogSource(json.source ?? "local");
+      } else {
+        setCatalogSource("local");
+      }
+    } catch (error) {
+      console.error("loadCatalog", error);
+      setCatalogSource("local");
+    }
+  }, []);
+
+  const syncApprovalCleanups = useCallback(async () => {
+    if (!user) return;
+
+    try {
+      const res = await fetch("/api/sounds/approval-sync");
+      if (!res.ok) return;
+
+      const json = (await res.json()) as {
+        approvals?: { privateSoundId: string; catalogSoundId: string }[];
+      };
+      const processed = new Set(getItem<string[]>(STORAGE_KEYS.processedApprovals, []));
+      const approvals = (json.approvals ?? []).filter(
+        (approval) => !processed.has(`${approval.privateSoundId}:${approval.catalogSoundId}`),
+      );
+      if (approvals.length === 0) return;
+
+      const state = syncStateRef.current;
+      const base = buildSyncPayload({
+        favorites: state.favorites,
+        hiddenSounds: state.hiddenSounds,
+        customNames: state.customNames,
+        playlists: state.playlists,
+        recentIds: state.recentIds,
+        playCounts: state.playCounts,
+        settings: state.settings,
+        shortcuts: state.shortcuts,
+        customSounds: state.customSounds,
+      });
+
+      let data = base;
+      for (const approval of approvals) {
+        data = applyApprovalToSyncData(
+          data,
+          approval.privateSoundId,
+          approval.catalogSoundId,
+        );
+      }
+
+      if (JSON.stringify(data) === JSON.stringify(base)) {
+        setItem(STORAGE_KEYS.processedApprovals, [
+          ...processed,
+          ...approvals.map((a) => `${a.privateSoundId}:${a.catalogSoundId}`),
+        ]);
+        return;
+      }
+
+      const removedIds = state.customSounds
+        .filter((s) => !data.customSounds.some((next) => next.id === s.id))
+        .map((s) => s.id);
+      removedIds.forEach((id) => audioManager.unloadSound(id));
+
+      setCustomSounds(data.customSounds);
+      setFavorites(new Set(data.favorites));
+      setHiddenSounds(new Set(data.hiddenSounds));
+      setCustomNames(data.customNames);
+      setPlaylists(data.playlists);
+      setRecentIds(data.recent);
+      setPlayCounts(data.playCounts);
+      setShortcuts(data.shortcuts);
+
+      setItem(STORAGE_KEYS.processedApprovals, [
+        ...processed,
+        ...approvals.map((a) => `${a.privateSoundId}:${a.catalogSoundId}`),
+      ]);
+    } catch (error) {
+      console.error("syncApprovalCleanups", error);
+    }
+  }, [user, setCustomSounds, setFavorites, setHiddenSounds, setCustomNames, setPlaylists, setRecentIds, setPlayCounts, setShortcuts]);
+
+  const refreshCatalog = useCallback(async () => {
+    await loadCatalog();
+    await syncApprovalCleanups();
+  }, [loadCatalog, syncApprovalCleanups]);
+
+  useEffect(() => {
+    void loadCatalog();
+  }, [loadCatalog]);
+
+  useEffect(() => {
+    if (!user) return;
+    void syncApprovalCleanups();
+  }, [user?.id, syncApprovalCleanups]);
+
+  useCloudSync({
+    favorites,
+    hiddenSounds,
+    customNames,
+    playlists,
+    recentIds,
+    playCounts,
+    settings: mergedSettings,
+    shortcuts,
+    customSounds,
+    setFavorites,
+    setHiddenSounds,
+    setCustomNames,
+    setPlaylists,
+    setRecentIds,
+    setPlayCounts,
+    setSettings,
+    setShortcuts,
+    setCustomSounds,
+  });
+
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<SoundCategory | "All">("All");
   const [viewFilter, setViewFilter] = useState<ViewFilter>("all");
@@ -133,7 +304,7 @@ export function SoundboardProvider({ children }: { children: ReactNode }) {
   const [playbackError, setPlaybackError] = useState<string | null>(null);
   const preloadedRef = useRef(new Set<string>());
 
-  const baseSounds = useMemo(() => mergeSounds(customSounds), [customSounds]);
+  const baseSounds = useMemo(() => mergeSounds(catalogSounds, customSounds), [catalogSounds, customSounds]);
   const sounds = useMemo(
     () => applyCustomNames(baseSounds, customNames),
     [baseSounds, customNames],
@@ -381,6 +552,17 @@ export function SoundboardProvider({ children }: { children: ReactNode }) {
     [activeCategory, filteredSounds, sounds, hiddenSounds, playSound],
   );
 
+  const addPrivateSound = useCallback(
+    (sound: Sound) => {
+      setCustomSounds((prev) => {
+        const next = [sound, ...prev.filter((s) => s.id !== sound.id)].slice(0, MAX_CUSTOM_SOUNDS);
+        audioManager.preloadSound(sound);
+        return next;
+      });
+    },
+    [setCustomSounds],
+  );
+
   const addCustomSound = useCallback(
     (input: Omit<Sound, "id" | "slug" | "isCustom" | "createdAt">) => {
       const slug = slugify(input.title);
@@ -393,7 +575,7 @@ export function SoundboardProvider({ children }: { children: ReactNode }) {
         category: "Custom",
       };
       setCustomSounds((prev) => {
-        const next = [sound, ...prev].slice(0, 50);
+        const next = [sound, ...prev].slice(0, MAX_CUSTOM_SOUNDS);
         audioManager.preloadSound(sound);
         return next;
       });
@@ -558,6 +740,8 @@ export function SoundboardProvider({ children }: { children: ReactNode }) {
   const value: SoundboardContextValue = {
     sounds,
     filteredSounds,
+    catalogSource,
+    refreshCatalog,
     playlists,
     activePlaylistId,
     searchQuery,
@@ -589,6 +773,7 @@ export function SoundboardProvider({ children }: { children: ReactNode }) {
     stopAllSounds,
     playRandom,
     addCustomSound,
+    addPrivateSound,
     removeCustomSound,
     renameSound,
     resetSoundName,
@@ -621,8 +806,11 @@ export function useSoundboard() {
 
 export function useKeyboardShortcuts() {
   const { shortcuts, sounds, playSound } = useSoundboard();
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
 
   useEffect(() => {
+    if (!isDesktop) return;
+
     const handler = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) {
@@ -640,5 +828,5 @@ export function useKeyboardShortcuts() {
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [shortcuts, sounds, playSound]);
+  }, [isDesktop, shortcuts, sounds, playSound]);
 }
