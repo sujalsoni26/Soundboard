@@ -960,6 +960,16 @@ export const SAMPLE_SOUNDS: Sound[] = [
     tags: ["fein","myinstants","brainrot"],
     emoji: "🧠",
     duration: 3,
+  },
+  {
+    id: "aakansha-laugh",
+    slug: "aakansha-laugh",
+    title: "Aakansha Laugh",
+    file: "/sounds/aakansha-laugh.mpeg",
+    category: "Classic" as SoundCategory,
+    tags: ["aakansha", "laugh", "meme", "funny"],
+    emoji: "😂",
+    duration: 3,
   }
 ];
 

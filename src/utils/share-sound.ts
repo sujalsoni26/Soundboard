@@ -1,13 +1,15 @@
 import type { ShareMode, Sound } from "@/types/sound";
 
 function getExtension(file: string): string {
-  const match = file.match(/\.(mp3|wav|ogg|webm|aac|m4a)(\?|$)/i);
+  const match = file.match(/\.(mp3|wav|ogg|webm|aac|m4a|mpeg|mpga)(\?|$)/i);
   return match?.[1]?.toLowerCase() ?? "mp3";
 }
 
 function getMimeType(ext: string): string {
   const types: Record<string, string> = {
     mp3: "audio/mpeg",
+    mpeg: "audio/mpeg",
+    mpga: "audio/mpeg",
     wav: "audio/wav",
     ogg: "audio/ogg",
     webm: "audio/webm",
